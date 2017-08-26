@@ -1,0 +1,13 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<parameters>
+  <parameter name="IIS Web Application Name" description="" value="RRtrabDM106" tags="IisApp">
+    <parameterEntry kind="ProviderPath" scope="IisApp" match="^C:\\Users\\Rafael\\Desktop\\trabDM106\\dm106\\dm106\\obj\\Release\\Package\\PackageTmp$" />
+    <parameterEntry kind="ProviderPath" scope="setAcl" match="^C:\\Users\\Rafael\\Desktop\\trabDM106\\dm106\\dm106\\obj\\Release\\Package\\PackageTmp$" />
+  </parameter>
+  <parameter name="dm106Context-Web.config Connection String" description="" value="Data Source=rrtrabserver.database.windows.net;Initial Catalog=RRtrabdm106;User ID=rafael;Password=r1A2F3##" tags="">
+    <parameterEntry kind="XmlFile" scope="C:\\Users\\Rafael\\Desktop\\trabDM106\\dm106\\dm106\\obj\\Release\\Package\\PackageTmp\\Web\.config$" match="/configuration/connectionStrings/add[@name='dm106Context']/@connectionString" />
+  </parameter>
+  <parameter name="DefaultConnection-Web.config Connection String" description="" value="Data Source=rrtrabserver.database.windows.net;Initial Catalog=RRtrabdm106;User ID=rafael;Password=r1A2F3##" tags="">
+    <parameterEntry kind="XmlFile" scope="C:\\Users\\Rafael\\Desktop\\trabDM106\\dm106\\dm106\\obj\\Release\\Package\\PackageTmp\\Web\.config$" match="/configuration/connectionStrings/add[@name='DefaultConnection']/@connectionString" />
+  </parameter>
+</parameters>
