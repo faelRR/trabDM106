@@ -32,14 +32,15 @@ namespace dm106.Controllers
         public IHttpActionResult GetOrder(int id)
         {
             Order order = db.Orders.Find(id);
+            
+            if (order == null)
+            {
+                return BadRequest("Pedido não encontrado");
+            }
+
             // Se nao for admin acesso nao autorizado e se nao for o dono no pedido nao autorizado
             if (checkUserFromOrder(User, order))
             {
-                if (order == null)
-                {
-                    return BadRequest("Pedido não encontrado");
-                }
-
                 return Ok(order);
             }
             else
@@ -100,8 +101,9 @@ namespace dm106.Controllers
             return StatusCode(HttpStatusCode.NoContent);
         }
 
-        // PUT: api/Orders/5
-        [ResponseType(typeof(void))]
+        [HttpPut]
+        [Route("api/closeOrder")]
+        [ResponseType(typeof(Order))]
         public IHttpActionResult CloseOrder(int id)
         {
             if (!ModelState.IsValid)
@@ -110,36 +112,34 @@ namespace dm106.Controllers
             }
 
             Order order = db.Orders.Find(id);
+
+            if (order == null)
+            {
+                return BadRequest("Pedido não existe");
+            }
+
             // Se nao for admin acesso nao autorizado e se nao for o dono no pedido nao autorizado
             if (checkUserEmailOrder(User, order.userEmail))
             {
 
-                if (order == null)
+                // se preco do frete ainda nao calculado
+                if (order.priceFreight == 0)
                 {
-                    return BadRequest("Pedido não existe");
+                    return BadRequest("Pedido não pode ser fechado, pedido sem o preço do frete calculado");
                 }
                 else
                 {
-                    // se preco do frete ainda nao calculado
-                    if (order.priceFreight == 0)
-                    {
-                        return BadRequest("Pedido não pode ser fechado, pedido sem o preço do frete calculado");
-                    }
-                    else
-                    {
-                        order.statusOrder = "fechado";
-                        db.Entry(order).State = EntityState.Modified;
+                    order.statusOrder = "fechado";
+                    db.Entry(order).State = EntityState.Modified;
 
-                        try
-                        {
-                            db.SaveChanges();
-                        }
-                        catch (DbUpdateConcurrencyException e)
-                        {
-                            return BadRequest("Acesso não autorizado " + e.Message);
-                        }
+                    try
+                    {
+                        db.SaveChanges();
                     }
-
+                    catch (DbUpdateConcurrencyException e)
+                    {
+                        return BadRequest("Acesso não autorizado " + e.Message);
+                    }
                 }
 
             }
@@ -188,28 +188,29 @@ namespace dm106.Controllers
 
             Order order = db.Orders.Find(id);
             // Se nao for admin acesso nao autorizado e se nao for o dono no pedido nao autorizado
-            if (checkUserEmailOrder(User, order.userEmail))
-            {
 
-                if (order == null)
-                {
-                    return BadRequest("Pedido não existe");
-                }
-                else
+
+            if (order == null)
+            {
+                return BadRequest("Pedido não existe");
+            }
+            else
+            {
+                if (checkUserEmailOrder(User, order.userEmail))
                 {
                     db.Orders.Remove(order);
                     db.SaveChanges();
                 }
+                else
+                {
+                    return BadRequest("Acesso não autorizado");
+                }
             }
-            else
-            {
-                return BadRequest("Acesso não autorizado");
-            }
-
             return Ok(order);
         }
 
-
+        [Route("api/freteDataEntregaOrder")]
+        [HttpPut]
         [ResponseType(typeof(Order))]
         public IHttpActionResult FreteDataEntregaOrder(int id)
         {
@@ -217,99 +218,114 @@ namespace dm106.Controllers
             // recupera o pedido pelo ID
             Order order = db.Orders.Find(id);
 
-            // confere se é o admin ou o dono
-            if (checkUserFromOrder(User, order))
+            // se nao existir o pedido
+            if (order == null)
+            {
+                return BadRequest("Pedido não existe");
+            }
+            else
             {
 
-                // se nao existir o pedido
-                if (order == null)
+                // confere se é o admin ou o dono
+                if (checkUserFromOrder(User, order))
                 {
-                    return BadRequest("Pedido não existe");
-                }              
 
-                CRMRestClient crmClient = new CRMRestClient();
-                
-                Customer customer = crmClient.GetCustomerByEmail(User.Identity.Name);
-
-                // zera as medidas
-                decimal considerarDiametro = 0;
-                decimal considerarAltura = 0;
-                decimal considerarComprimento = 0;
-                decimal largura = 0;
-
-                // confere se achou o cliente
-                if (customer != null)
-                {
-                    // soma medida dos itens
-                    foreach (OrderItem tmpOrder in order.OrderItems)
+                    if (order.statusOrder != "novo")
                     {
-                        // somatorio do preço
-                        order.priceOrder += tmpOrder.Product.preco * tmpOrder.quantidade;
-
-                        // somatorio do peso
-                        order.weightOrder += tmpOrder.Product.peso * tmpOrder.quantidade;
-
-
-                        // -- considerando que os produtos estaram um do lado do outro, 
-                        //               somo a largura e pego a maior altura , comprimento e diametro -- //
-
-                        // somatorio da largura
-                        largura += tmpOrder.Product.largura * tmpOrder.quantidade;
-                                                
-                        if (tmpOrder.Product.altura > considerarAltura)
-                        {
-                            considerarAltura = tmpOrder.Product.altura;
-                        }
-                        if (tmpOrder.Product.diametro > considerarDiametro)
-                        {
-                            considerarDiametro = tmpOrder.Product.diametro;
-                        }
-                        if (tmpOrder.Product.comprimento > considerarComprimento)
-                        {
-                            considerarComprimento = tmpOrder.Product.comprimento;
-                        }
-
+                        return BadRequest("Status do pedido diferente de 'novo', não é possivel recalcular o frete.");
                     }
 
-                    // Considerando que a loja esteja em São Luís - MA => Rua Vila Anselmo - 65040-101
 
-
-                    CalcPrecoPrazoWS correios = new CalcPrecoPrazoWS();
-                    // (  string nCdEmpresa, string sDsSenha, string nCdServico, string sCepOrigem, 
-                    //    string sCepDestino, string nVlPeso, int nCdFormato, decimal nVlComprimento, 
-                    //    decimal nVlAltura, decimal nVlLargura, decimal nVlDiametro, string sCdMaoPropria, 
-                    //    decimal nVlValorDeclarado, string sCdAvisoRecebimento) 
-
-                    cResultado resultado = correios.CalcPrecoPrazo("", "", "40010", "65040101", customer.zip, 
-                        order.weightOrder.ToString(), 1, considerarComprimento, considerarAltura, largura, considerarDiametro, 
-                        "N", order.priceOrder, "S");
-
-                    if (resultado.Servicos[0].Erro.Equals("0"))
+                    if (order.OrderItems.Count == 0)
                     {
-                        // ajusta preço do frete
-                        order.priceFreight = Convert.ToDecimal(resultado.Servicos[0].Valor) / 100;
-                        // atualiza o preço do pedido , somando o valor do frete
-                        order.priceOrder += order.priceFreight;
-                        // considerar a data da entrega = data pedido mais prazo entrega
-                        order.dateOrderDelivery = order.dateOrder.AddDays(Convert.ToDouble(resultado.Servicos[0].PrazoEntrega));
-                        //modificações são persistidas no banco de dados
-                        db.SaveChanges();
-                        
-                        return Ok("Preço do frete: R$ " + resultado.Servicos[0].Valor + " => Entrega em " + resultado.Servicos[0].PrazoEntrega + " dia(s)");
+                        return BadRequest("Pedido sem itens cadastrados");
+                    }
+                    
+
+                    CRMRestClient crmClient = new CRMRestClient();
+                    Customer customer = crmClient.GetCustomerByEmail(User.Identity.Name);
+
+                    // zera as medidas
+                    decimal considerarDiametro = 0;
+                    decimal considerarAltura = 0;
+                    decimal considerarComprimento = 0;
+                    decimal largura = 0;
+
+                    // confere se achou o cliente
+                    if (customer != null)
+                    {
+                        order.priceOrder = 0;
+                        order.weightOrder = 0;
+                        // soma medida dos itens
+                        foreach (OrderItem tmpOrder in order.OrderItems)
+                        {
+                            // somatorio do preço
+                            order.priceOrder += tmpOrder.Product.preco * tmpOrder.quantidade;
+
+                            // somatorio do peso
+                            order.weightOrder += tmpOrder.Product.peso * tmpOrder.quantidade;
+
+
+                            // -- considerando que os produtos estaram um do lado do outro, 
+                            //               somo a largura e pego a maior altura , comprimento e diametro -- //
+
+                            // somatorio da largura
+                            largura += tmpOrder.Product.largura * tmpOrder.quantidade;
+
+                            if (tmpOrder.Product.altura > considerarAltura)
+                            {
+                                considerarAltura = tmpOrder.Product.altura;
+                            }
+                            if (tmpOrder.Product.diametro > considerarDiametro)
+                            {
+                                considerarDiametro = tmpOrder.Product.diametro;
+                            }
+                            if (tmpOrder.Product.comprimento > considerarComprimento)
+                            {
+                                considerarComprimento = tmpOrder.Product.comprimento;
+                            }
+
+                        }
+
+                        // Considerando que a loja esteja em São Luís - MA => Rua Vila Anselmo - 65040-101
+
+                        CalcPrecoPrazoWS correios = new CalcPrecoPrazoWS();
+                        // (  string nCdEmpresa, string sDsSenha, string nCdServico, string sCepOrigem, 
+                        //    string sCepDestino, string nVlPeso, int nCdFormato, decimal nVlComprimento, 
+                        //    decimal nVlAltura, decimal nVlLargura, decimal nVlDiametro, string sCdMaoPropria, 
+                        //    decimal nVlValorDeclarado, string sCdAvisoRecebimento) 
+
+                        cResultado resultado = correios.CalcPrecoPrazo("", "", "40010", "65040101", customer.zip,
+                            order.weightOrder.ToString(), 1, considerarComprimento, considerarAltura, largura, considerarDiametro,
+                            "N", order.priceOrder, "S");
+
+                        if (resultado.Servicos[0].Erro.Equals("0"))
+                        {
+                            // ajusta preço do frete
+                            order.priceFreight = Convert.ToDecimal(resultado.Servicos[0].Valor) / 100;
+                            // atualiza o preço do pedido , somando o valor do frete
+                            order.priceOrder += order.priceFreight;
+                            // considerar a data da entrega = data pedido mais prazo entrega
+                            order.dateOrderDelivery = order.dateOrder.AddDays(Convert.ToDouble(resultado.Servicos[0].PrazoEntrega));
+                            //modificações são persistidas no banco de dados
+                            db.SaveChanges();
+
+                            return Ok("Preço do frete: R$ " + resultado.Servicos[0].Valor + " => Entrega em " + resultado.Servicos[0].PrazoEntrega + " dia(s)");
+                        }
+                        else
+                        {
+                            return BadRequest("Ouve um erro " + resultado.Servicos[0].Erro + " , " + resultado.Servicos[0].MsgErro);
+                        }
                     }
                     else
                     {
-                        return BadRequest("Ouve um erro " + resultado.Servicos[0].Erro + " , " + resultado.Servicos[0].MsgErro);
+                        return BadRequest("Impossibilidade ou erro ao acessar o serviço de CRM ");
                     }
                 }
                 else
                 {
-                    return BadRequest("Impossibilidade ou erro ao acessar o serviço de CRM ");
+                    return BadRequest("Acesso não autorizado");
                 }
-            }
-            else
-            {
-                return BadRequest("Acesso não autorizado");
             }
 
         }

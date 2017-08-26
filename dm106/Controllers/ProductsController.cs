@@ -34,7 +34,7 @@ namespace dm106.Controllers
             Operação para recuperar a informação de um produto a partir de sua identificação única, 
             que poderá ser acessível apenas por usuários cadastrados, inclusive o administrador;
         */
-        // GET: api/Products/5
+        // GET: api/Products/5        
         [ResponseType(typeof(Product))]
         public IHttpActionResult GetProduct(int id)
         {
